@@ -300,19 +300,60 @@
     function updateDraft(n, v) { if (v && v !== "0") draft[n] = v; else delete draft[n]; }
 
     function submitBatch() {
-        const user = savedUser;
-        const items = Object.keys(draft);
-        if (!user || items.length === 0) return alert('請輸入數量');
-        if(confirm('確定送出？')) {
-            const event = document.getElementById('eventTag').value || "無備註";
-            items.forEach(name => {
-                let delta = (currentMode === '入庫') ? Math.abs(parseInt(draft[name])) : -Math.abs(parseInt(draft[name]));
-                db.ref('inventory/' + name).transaction(c => (c || 0) + delta);
-                db.ref('logs').push({ user, name, val: delta, event, date: document.getElementById('actionDate').value, time: new Date().toLocaleString() });
+    const user = savedUser;
+    const items = Object.keys(draft);
+
+    if (!user) return alert('請先選擇人員！');
+    if (items.length === 0) return alert('你還沒有輸入任何數量喔！');
+
+    // --- 1. 建立核對清單文字 ---
+    let confirmMessage = "📋 【庫存修改核對】\n";
+    confirmMessage += "------------------------\n";
+    confirmMessage += "操作模式：" + (currentMode === '入庫' ? "📥 入庫 (歸還)" : "📤 出庫 (拿取)") + "\n";
+    confirmMessage += "執行人員：" + user + "\n\n";
+    
+    items.forEach(name => {
+        confirmMessage += "🔹 " + name + " ： " + draft[name] + "\n";
+    });
+    
+    confirmMessage += "------------------------\n";
+    confirmMessage += "確定要送出以上修改嗎？";
+
+    // --- 2. 顯示核對視窗 ---
+    if (confirm(confirmMessage)) {
+        const event = document.getElementById('eventTag').value || "無備註";
+        const actionDate = document.getElementById('actionDate').value;
+
+        // 執行 Firebase 更新
+        items.forEach(name => {
+            // 計算增加或減少
+            let delta = (currentMode === '入庫') ? 
+                        Math.abs(parseInt(draft[name])) : 
+                        -Math.abs(parseInt(draft[name]));
+
+            // 更新庫存
+            db.ref('inventory/' + name).transaction(c => (c || 0) + delta);
+
+            // 寫入日誌
+            db.ref('logs').push({
+                user: user,
+                name: name,
+                val: delta,
+                event: event,
+                date: actionDate,
+                time: new Date().toLocaleString()
             });
-            draft = {}; alert('送出成功'); location.reload();
-        }
+        });
+
+        // 成功後的動作
+        draft = {}; 
+        alert('✅ 修改成功！');
+        location.reload(); // 重新整理頁面
+    } else {
+        // 使用者按了取消
+        console.log("使用者已取消送出");
     }
+}
 
     function submitChange(name) {
         const user = savedUser;
