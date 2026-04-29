@@ -43,6 +43,27 @@
         .batch-bar { position: fixed; bottom: 0; left: 0; right: 0; background: #222; padding: 15px; z-index: 999; text-align: center; }
         .batch-btn { width: 90%; max-width: 500px; padding: 15px; border-radius: 10px; font-size: 18px; font-weight: bold; border: none; color: white; cursor: pointer; }
         .sub-group-title { width: 100%; color: #FFD700; padding: 10px 0; margin-top: 15px; font-weight: bold; font-size: 18px; border-bottom: 1px dashed #FFD700; }
+        /* 模式顏色定義 */
+.mode-out-theme { background-color: #8B0000 !important; } /* 深紅背景 */
+.mode-in-theme { background-color: #1B4D3E !important; }  /* 深綠背景 */
+.header-out { background: #E91E63 !important; } /* 出庫標題亮紅 */
+.header-in { background: #4CAF50 !important; }  /* 入庫標題亮綠 */
+
+/* 快速切換按鈕樣式 */
+.switch-mode-btn {
+    position: absolute;
+    right: 10px;
+    top: 50%;
+    transform: translateY(-50%);
+    padding: 5px 12px;
+    background: white;
+    color: var(--text-dark);
+    border-radius: 20px;
+    font-size: 14px;
+    font-weight: bold;
+    border: none;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+}
     </style>
 </head>
 <body>
@@ -102,15 +123,14 @@
     </div>
 
     <div id="listPage" class="page">
-        <div class="header"><button class="back-btn" onclick="showPage('homePage')">← 返回類別</button><h2 id="categoryTitle" style="color:white; margin:0;"></h2></div>
-        <div id="itemContainer" style="max-width:600px; margin:0 auto; padding:10px;"></div>
-        <div class="batch-bar"><button id="batchBtn" class="batch-btn" onclick="submitBatch()">🚀 一鍵全部送出</button></div>
+    <div id="listHeader" class="header">
+        <button class="back-btn" onclick="showPage('homePage')" style="position:absolute; left:10px;">← 返回</button>
+        <h2 id="categoryTitle" style="color:white; margin:0;"></h2>
+        <button id="quickSwitchBtn" class="switch-mode-btn" onclick="toggleQuickMode()"></button>
     </div>
-
-    <div id="summaryPage" class="page">
-        <div class="header"><button class="back-btn" onclick="location.reload()">← 回首頁</button><h1>即時庫存總量</h1></div>
-        <div id="summaryContainer" style="max-width:600px; margin:0 auto; padding:15px; padding-bottom:80px;"></div>
-    </div>
+    <div id="itemContainer" style="max-width:600px; margin:0 auto; padding:10px;"></div>
+    <div class="batch-bar"><button id="batchBtn" class="batch-btn" onclick="submitBatch()">🚀 一鍵送出</button></div>
+</div>
 
     <script>
     const firebaseConfig = { 
@@ -280,17 +300,47 @@
         return card;
     }
 
-    function setMode(mode) {
-        currentMode = mode;
-        document.getElementById('modeTitle').innerText = (mode === '取用' ? '📤 出庫模式' : '📥 入庫模式');
-        document.getElementById('actionDate').valueAsDate = new Date();
-        const btn = document.getElementById('batchBtn');
-        if(btn) {
-            btn.style.background = (mode === '入庫' ? '#4CAF50' : '#E91E63');
-            btn.innerText = (mode === '入庫' ? '📥 一鍵全部入庫' : '📤 一鍵全部出庫');
-        }
-        showPage('homePage');
+  // 修改原本的 setMode
+function setMode(mode) {
+    currentMode = mode;
+    const body = document.body;
+    const header = document.getElementById('listHeader');
+    const switchBtn = document.getElementById('quickSwitchBtn');
+    const batchBtn = document.getElementById('batchBtn');
+
+    document.getElementById('modeTitle').innerText = (mode === '取用' ? '📤 出庫模式' : '📥 入庫模式');
+    document.getElementById('actionDate').valueAsDate = new Date();
+
+    // 修改顏色視覺
+    if (mode === '取用') {
+        body.className = 'mode-out-theme'; // 全域背景變深紅
+        if(header) header.className = 'header header-out';
+        if(batchBtn) batchBtn.style.background = '#E91E63';
+        if(switchBtn) switchBtn.innerText = '🔄 轉為入庫';
+    } else {
+        body.className = 'mode-in-theme'; // 全域背景變深綠
+        if(header) header.className = 'header header-in';
+        if(batchBtn) batchBtn.style.background = '#4CAF50';
+        if(switchBtn) switchBtn.innerText = '🔄 轉為出庫';
     }
+
+    showPage('homePage');
+}
+
+// 新增：頁面內的快速切換
+function toggleQuickMode() {
+    const nextMode = (currentMode === '取用' ? '入庫' : '取用');
+    if (Object.keys(draft).length > 0) {
+        if (!confirm("切換模式將會清空目前已填寫的數量，確定切換嗎？")) return;
+    }
+    draft = {}; // 清空草稿避免出入庫混亂
+    setMode(nextMode);
+    
+    // 重新渲染當前類別畫面，讓按鈕顏色更新
+    const currentCat = document.getElementById('categoryTitle').innerText.includes('Truss') ? 'truss' : 
+                       document.getElementById('categoryTitle').innerText.includes('帳篷') ? 'tent' : 'others';
+    openCategory(currentCat);
+}
 
     function showPage(id) { 
         document.querySelectorAll('.page').forEach(p => p.classList.remove('active')); 
