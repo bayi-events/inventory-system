@@ -11,23 +11,16 @@
     <link rel="apple-touch-icon" href="https://i.postimg.cc/XNCSk29x/八毅LOGO.jpg">
     <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-database-compat.js"></script>
-   <style>
+    <style>
         :root { --bg-wine: #4A0404; --btn-white: #FFFFFF; --text-dark: #333; }
-        /* 模式動態背景顏色 */
         body.mode-out-theme { background-color: #720909; transition: 0.3s; }
         body.mode-in-theme { background-color: #11382b; transition: 0.3s; }
         body { font-family: -apple-system, sans-serif; background-color: var(--bg-wine); color: white; margin: 0; padding: 10px; overflow-x: hidden; }
-        
         .page { display: none; padding-bottom: 80px; } .page.active { display: block; }
         .header { text-align: center; padding: 10px 0; background: var(--bg-wine); position: sticky; top: 0; z-index: 100; display: flex; align-items: center; justify-content: center; min-height: 60px; }
-        
-        /* 標題變色樣式 */
         .header-out { background: #E91E63 !important; }
         .header-in { background: #4CAF50 !important; }
-
-        /* 快速切換按鈕 */
         .switch-mode-btn { position: absolute; right: 10px; padding: 6px 12px; background: white; color: #333; border-radius: 20px; font-size: 13px; font-weight: bold; border: none; box-shadow: 0 2px 4px rgba(0,0,0,0.3); cursor: pointer; }
-
         .mode-container { display: flex; flex-direction: column; gap: 15px; align-items: center; justify-content: flex-start; padding-top: 10px; }
         .mode-btn { width: 100%; padding: 30px; border-radius: 15px; font-size: 28px; font-weight: bold; border: none; cursor: pointer; color: white; box-shadow: 0 4px 6px rgba(0,0,0,0.3); }
         .btn-out { background: #E91E63; } .btn-in { background: #4CAF50; }  
@@ -56,321 +49,10 @@
         .batch-btn { width: 90%; max-width: 500px; padding: 15px; border-radius: 10px; font-size: 18px; font-weight: bold; border: none; color: white; cursor: pointer; }
         .sub-group-title { width: 100%; color: #FFD700; padding: 10px 0; margin-top: 15px; font-weight: bold; font-size: 18px; border-bottom: 1px dashed #FFD700; }
     </style>
-
-    <script>
-    const firebaseConfig = { 
-        apiKey: "AIzaSyBNiATgf4yVR5qZ5CEmGClfm22yjq2fBlI", 
-        authDomain: "bayi-inventory.firebaseapp.com", 
-        projectId: "bayi-inventory", 
-        databaseURL: "https://bayi-inventory-default-rtdb.firebaseio.com", 
-        storageBucket: "bayi-inventory.firebasestorage.app", 
-        messagingSenderId: "494997600674", 
-        appId: "1:494997600674:web:711588fab8d8ae70eb5afb" 
-    };
-    firebase.initializeApp(firebaseConfig);
-    const db = firebase.database();
-
-    let currentMode = '', draft = {}, savedUser = localStorage.getItem('bayi_user') || "";
-    let currentVoiceTarget = ''; 
-    let remoteCategories = {}; 
-
-    // 全域監聽資料庫
-    db.ref('inventory').on('value', snap => {
-        const data = snap.val() || {};
-        for (let name in data) {
-            const el = document.getElementById(`qty-${name}`);
-            if (el) el.innerText = data[name];
-        }
-    });
-
-    db.ref('target').on('value', snap => {
-        const data = snap.val() || {};
-        for (let name in data) {
-            const el = document.getElementById(`target-${name}`);
-            if (el) el.innerText = data[name];
-        }
-    });
-
-    function initUser() {
-        if(savedUser) {
-            if(document.getElementById('userName')) document.getElementById('userName').value = savedUser;
-            if(document.getElementById('entryUserName')) document.getElementById('entryUserName').value = savedUser;
-        }
-        fetchCategories(); 
-    }
-
-    function fetchCategories() {
-        db.ref('categories').on('value', snap => {
-            remoteCategories = snap.val() || {};
-        });
-    }
-
-    function syncUser(val) {
-        savedUser = val;
-        localStorage.setItem('bayi_user', val);
-        ['userName', 'entryUserName'].forEach(id => {
-            const el = document.getElementById(id);
-            if(el) el.value = val;
-        });
-    }
-
-    function setMode(mode) {
-        currentMode = mode;
-        const body = document.body;
-        const modeTitle = document.getElementById('modeTitle');
-        const batchBtn = document.getElementById('batchBtn');
-        
-        // 視覺變色邏輯
-        if (mode === '取用') {
-            body.className = 'mode-out-theme';
-            modeTitle.innerText = '📤 出庫模式';
-            if(batchBtn) {
-                batchBtn.style.background = '#E91E63';
-                batchBtn.innerText = '📤 一鍵全部出庫';
-            }
-        } else {
-            body.className = 'mode-in-theme';
-            modeTitle.innerText = '📥 入庫模式';
-            if(batchBtn) {
-                batchBtn.style.background = '#4CAF50';
-                batchBtn.innerText = '📥 一鍵全部入庫';
-            }
-        }
-        
-        document.getElementById('actionDate').valueAsDate = new Date();
-        showPage('homePage');
-    }
-
-    function toggleQuickMode() {
-        const nextMode = (currentMode === '取用' ? '入庫' : '取用');
-        if (Object.keys(draft).length > 0) {
-            if (!confirm("切換模式會清空目前的暫存數量，確定切換？")) return;
-        }
-        draft = {}; 
-        setMode(nextMode);
-        
-        // 更新當前頁面顏色
-        const currentTitle = document.getElementById('categoryTitle').innerText;
-        let catKey = 'others';
-        if(currentTitle.includes('Truss')) catKey = 'truss';
-        else if(currentTitle.includes('帳篷')) catKey = 'tent';
-        openCategory(catKey);
-    }
-
-   function openCategory(cat) {
-        const container = document.getElementById('itemContainer'); 
-        container.innerHTML = '';
-        
-        // 設定標題與切換按鈕顏色
-        const titleText = (cat==='truss'?'🏗️ Truss類':cat==='tent'?'⛺ 帳篷類':'📦 其它物料');
-        const header = document.getElementById('listPage').querySelector('.header');
-        header.className = 'header ' + (currentMode === '取用' ? 'header-out' : 'header-in');
-        document.getElementById('categoryTitle').innerText = titleText;
-        
-        const subCats = remoteCategories[cat];
-        if (subCats) {
-            for (let subTitle in subCats) {
-                const titleDiv = document.createElement('div');
-                titleDiv.className = 'sub-group-title';
-                titleDiv.innerText = subTitle;
-                container.appendChild(titleDiv);
-
-                // --- 新增：自定義排序邏輯 ---
-                const items = Object.keys(subCats[subTitle]).sort((a, b) => {
-                    // 權重計算函式
-                    const getWeight = (name) => {
-                        // 檢查是否為「數字+Truss」（如 10Truss, 20Truss）
-                        const numTruss = name.match(/^(\d+)Truss/);
-                        if (numTruss) return parseInt(numTruss[1]); 
-
-                        // 檢查是否為「數字+米Truss」（如 1米Truss, 2米Truss）
-                        const meterTruss = name.match(/^(\d+)米Truss/);
-                        if (meterTruss) return parseInt(meterTruss[1]) + 1000; // 給予較大權重排後面
-
-                        return 9999; // 其他東西排最後
-                    };
-
-                    const weightA = getWeight(a);
-                    const weightB = getWeight(b);
-
-                    if (weightA !== weightB) return weightA - weightB;
-                    return a.localeCompare(b, 'zh-Hant'); // 若權重一樣則按中文排序
-                });
-                // -----------------------
-
-                items.forEach(itemName => {
-                    container.appendChild(createItemCard(itemName));
-                });
-            }
-            refreshDigits();
-        } else {
-            container.innerHTML = '<div style="padding:20px; text-align:center;">資料載入中...</div>';
-        }
-        showPage('listPage');
-    }
-
-    function createItemCard(name) {
-        const card = document.createElement('div');
-        card.className = 'item-card';
-        card.innerHTML = `
-            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
-                <b style="color:#333; flex:1;">${name}</b>
-                <div style="display:flex; gap:10px; align-items:center;">
-                    <span class="stock-label" id="qty-${name}">-</span>
-                    <span style="color:#ccc">/</span>
-                    <span class="target-label" id="target-${name}">-</span>
-                </div>
-            </div>
-            <div class="qty-input-group">
-                <input type="number" id="input-${name}" class="input-num" value="${draft[name] || ''}" oninput="updateDraft('${name}', this.value)" placeholder="0">
-                <button class="submit-btn" style="background:${currentMode==='入庫'?'#4CAF50':'#E91E63'}" onclick="submitChange('${name}')">確認</button>
-            </div>`;
-        return card;
-    }
-
-    function updateDraft(n, v) { if (v && v !== "0") draft[n] = v; else delete draft[n]; }
-
-    // --- 核心：批量送出核對 ---
-    function submitBatch() {
-        const user = savedUser;
-        const items = Object.keys(draft);
-        if (!user) return alert('請先選擇人員！');
-        if (items.length === 0) return alert('尚未輸入任何數量！');
-
-        let msg = `📋 【${currentMode}核對清單】\n人員：${user}\n----------------------\n`;
-        items.forEach(name => { msg += `🔹 ${name} : ${draft[name]}\n`; });
-        msg += `----------------------\n確定要送出嗎？`;
-
-        if (confirm(msg)) {
-            const event = document.getElementById('eventTag').value || "無備註";
-            const date = document.getElementById('actionDate').value;
-            items.forEach(name => {
-                let delta = (currentMode === '入庫' ? 1 : -1) * Math.abs(parseInt(draft[name]));
-                db.ref('inventory/' + name).transaction(c => (c || 0) + delta);
-                db.ref('logs').push({ user, name, val: delta, event, date, time: new Date().toLocaleString() });
-            });
-            draft = {};
-            alert('✅ 批量修改成功！');
-            location.reload();
-        }
-    }
-
-    // --- 核心：單項送出核對 ---
-    function submitChange(name) {
-        const val = parseInt(document.getElementById('input-' + name).value);
-        if (!savedUser || isNaN(val)) return alert('請確認人員與數量');
-
-        let msg = `📋 【單項確認】\n模式：${currentMode}\n品項：${name}\n數量：${val}\n確定送出？`;
-        
-        if (confirm(msg)) {
-            let delta = (currentMode === '入庫' ? 1 : -1) * Math.abs(val);
-            db.ref('inventory/' + name).transaction(c => (c || 0) + delta);
-            db.ref('logs').push({ 
-                user: savedUser, name, val: delta, 
-                event: document.getElementById('eventTag').value || "無備註", 
-                date: document.getElementById('actionDate').value, 
-                time: new Date().toLocaleString() 
-            });
-            alert('✅ 成功');
-            document.getElementById('input-' + name).value = '';
-            delete draft[name];
-            refreshDigits();
-        }
-    }
-
-    function refreshDigits() {
-        db.ref('inventory').once('value', s => {
-            const d = s.val() || {};
-            for(let n in d) { 
-                const el = document.getElementById(`qty-${n}`);
-                if(el) el.innerText = d[n];
-            }
-        });
-        db.ref('target').once('value', s => {
-            const d = s.val() || {};
-            for(let n in d) {
-                const el = document.getElementById(`target-${n}`);
-                if(el) el.innerText = d[n];
-            }
-        });
-    }
-
-    function showPage(id) { 
-        document.querySelectorAll('.page').forEach(p => p.classList.remove('active')); 
-        document.getElementById(id).classList.add('active'); 
-    }
-
-    function showSummary() {
-        const container = document.getElementById('summaryContainer'); 
-        container.innerHTML = '載入中...';
-        db.ref('inventory').once('value', snap => {
-            const invData = snap.val() || {};
-            db.ref('target').once('value', targetSnap => {
-                const targetData = targetSnap.val() || {};
-                container.innerHTML = '';
-                const groupNames = {truss: "🏗️ Truss 類", tent: "⛺ 帳篷類", others: "📦 其他物料"};
-                for (let mainKey in remoteCategories) {
-                    container.innerHTML += `<div class="sub-group-title" style="margin-top:20px; color:#FFD700;">${groupNames[mainKey] || mainKey}</div>`;
-                    const subCats = remoteCategories[mainKey];
-                    for (let subTitle in subCats) {
-                        container.innerHTML += `<div style="padding:5px 10px; font-size:14px; color:#aaa;">● ${subTitle}</div>`;
-                        Object.keys(subCats[subTitle]).forEach(name => {
-                            const row = document.createElement('div');
-                            row.style.cssText = "background:white; color:black; margin:5px 10px; padding:10px; border-radius:8px; display:flex; justify-content:space-between; align-items:center;";
-                            row.innerHTML = `<span>${name}</span>
-                                <div>
-                                    <b style="color:#E91E63;">${invData[name] || 0}</b> 
-                                    <span style="color:#ccc; margin:0 4px;">/</span> 
-                                    <b style="color:#2196F3;">${targetData[name] || 0}</b>
-                                </div>`;
-                            container.appendChild(row);
-                        });
-                    }
-                }
-            });
-        });
-        showPage('summaryPage');
-    }
-
-    // 語音相關邏輯 (保持原樣)
-    let recognition;
-    if ('webkitSpeechRecognition' in window) {
-        recognition = new webkitSpeechRecognition();
-        recognition.lang = 'zh-TW';
-        recognition.onresult = (e) => {
-            const res = e.results[0][0].transcript;
-            const targetId = currentVoiceTarget === 'entry' ? 'entryVoiceInput' : 'eventTag';
-            document.getElementById(targetId).value += res + " ";
-            stopVisuals();
-        };
-        recognition.onend = stopVisuals;
-    }
-    function toggleVoice(source) {
-        currentVoiceTarget = source;
-        const btnId = source === 'entry' ? 'entryMicBtn' : 'voiceBtn';
-        const btn = document.getElementById(btnId);
-        if (btn.classList.contains('recording')) { recognition.stop(); } 
-        else { recognition.start(); btn.classList.add('recording'); btn.innerText = "🛑"; }
-    }
-    function stopVisuals() { 
-        ['entryMicBtn', 'voiceBtn'].forEach(id => {
-            const btn = document.getElementById(id);
-            if (btn) { btn.classList.remove('recording'); btn.innerText = "🎤"; }
-        });
-    }
-    function quickSendVoice(source) {
-        const inputId = source === 'entry' ? 'entryVoiceInput' : 'eventTag';
-        const note = document.getElementById(inputId).value;
-        if(!savedUser || !note) return alert("請確認人員已選取並錄音");
-        db.ref('logs').push({ user: savedUser, type: "語音回覆", note, date: new Date().toISOString().split('T')[0], time: new Date().toLocaleString() });
-        alert("回覆已送出"); document.getElementById(inputId).value = "";
-    }
-
-    window.onload = initUser;
-    </script>
 </head>
 <body>
 
+    <!-- 首頁模式選擇 -->
     <div id="modePage" class="page active">
         <div class="header"><h1>八毅庫存系統</h1></div>
         <div class="form-container">
@@ -397,8 +79,9 @@
         </div>
     </div>
 
+    <!-- 表單填寫頁 -->
     <div id="homePage" class="page">
-        <div class="header"><button class="back-btn" onclick="location.reload()">← 回首頁</button><h1 id="modeTitle"></h1></div>
+        <div class="header"><button class="back-btn" onclick="showPage('modePage')">← 回首頁</button><h1 id="modeTitle"></h1></div>
         <div class="form-container">
             <div class="form-group">
                 <label>員工姓名</label>
@@ -425,15 +108,22 @@
         </div>
     </div>
 
+    <!-- 清單顯示頁 -->
     <div id="listPage" class="page">
-    <div id="listHeader" class="header">
-        <button class="back-btn" onclick="showPage('homePage')" style="position:absolute; left:10px;">← 返回</button>
-        <h2 id="categoryTitle" style="color:white; margin:0;"></h2>
-        <button id="quickSwitchBtn" class="switch-mode-btn" onclick="toggleQuickMode()"></button>
+        <div id="listHeader" class="header">
+            <button class="back-btn" onclick="showPage('homePage')" style="position:absolute; left:10px;">← 返回</button>
+            <h2 id="categoryTitle" style="color:white; margin:0;"></h2>
+            <button id="quickSwitchBtn" class="switch-mode-btn" onclick="toggleQuickMode()"></button>
+        </div>
+        <div id="itemContainer" style="max-width:600px; margin:0 auto; padding:10px;"></div>
+        <div class="batch-bar"><button id="batchBtn" class="batch-btn" onclick="submitBatch()">🚀 一鍵送出</button></div>
     </div>
-    <div id="itemContainer" style="max-width:600px; margin:0 auto; padding:10px;"></div>
-    <div class="batch-bar"><button id="batchBtn" class="batch-btn" onclick="submitBatch()">🚀 一鍵送出</button></div>
-</div>
+
+    <!-- 總量查看頁 -->
+    <div id="summaryPage" class="page">
+        <div class="header"><button class="back-btn" onclick="showPage('modePage')">← 返回</button><h1>即時庫存總覽</h1></div>
+        <div id="summaryContainer" style="max-width:600px; margin:0 auto; padding:10px;"></div>
+    </div>
 
     <script>
     const firebaseConfig = { 
@@ -452,20 +142,20 @@
     let currentVoiceTarget = ''; 
     let remoteCategories = {}; 
 
-    // ✅ 全域監聽：這兩段放在最外面，只要資料一變，全 App 數字秒改
-    db.ref('inventory').on('value', snap => {
-        const data = snap.val() || {};
-        for (let name in data) {
+    // ✅ 單一監聽器優化：避免重複與混亂[cite: 1]
+    db.ref().on('value', snap => {
+        const fullData = snap.val() || {};
+        const inv = fullData.inventory || {};
+        const tar = fullData.target || {};
+        remoteCategories = fullData.categories || {};
+        
+        for (let name in inv) {
             const el = document.getElementById(`qty-${name}`);
-            if (el) el.innerText = data[name];
+            if (el) el.innerText = inv[name];
         }
-    });
-
-    db.ref('target').on('value', snap => {
-        const data = snap.val() || {};
-        for (let name in data) {
+        for (let name in tar) {
             const el = document.getElementById(`target-${name}`);
-            if (el) el.innerText = data[name];
+            if (el) el.innerText = tar[name];
         }
     });
 
@@ -474,13 +164,6 @@
             if(document.getElementById('userName')) document.getElementById('userName').value = savedUser;
             if(document.getElementById('entryUserName')) document.getElementById('entryUserName').value = savedUser;
         }
-        fetchCategories(); 
-    }
-
-    function fetchCategories() {
-        db.ref('categories').on('value', snap => {
-            remoteCategories = snap.val() || {};
-        });
     }
 
     function syncUser(val) {
@@ -540,6 +223,7 @@
         document.getElementById(inputId).value = "";
     }
 
+    // ✅ 保留排序邏輯的分類顯示[cite: 1]
     function openCategory(cat) {
         const container = document.getElementById('itemContainer'); 
         container.innerHTML = '';
@@ -553,34 +237,33 @@
                 titleDiv.innerText = subTitle;
                 container.appendChild(titleDiv);
 
-                const items = Object.keys(subCats[subTitle]);
+                const items = Object.keys(subCats[subTitle]).sort((a, b) => {
+                    const getWeight = (name) => {
+                        const numTruss = name.match(/^(\d+)Truss/);
+                        if (numTruss) return parseInt(numTruss[1]); 
+                        const meterTruss = name.match(/^(\d+)米Truss/);
+                        if (meterTruss) return parseInt(meterTruss[1]) + 1000;
+                        return 9999;
+                    };
+                    const wA = getWeight(a), wB = getWeight(b);
+                    return (wA !== wB) ? wA - wB : a.localeCompare(b, 'zh-Hant');
+                });
+
                 items.forEach(itemName => {
                     container.appendChild(createItemCard(itemName));
                 });
             }
-            // ✅ 打開頁面時手動觸發一次數據填充，確保數字瞬間出現
             refreshDigits();
-        } else {
-            container.innerHTML = '<div style="padding:20px; text-align:center;">資料載入中...</div>';
         }
         showPage('listPage');
     }
 
-    // ✅ 新增：用來強迫刷新畫面上數字的工具
     function refreshDigits() {
-        db.ref('inventory').once('value', s => {
+        db.ref().once('value', s => {
             const d = s.val() || {};
-            for(let n in d) { 
-                const el = document.getElementById(`qty-${n}`);
-                if(el) el.innerText = d[n];
-            }
-        });
-        db.ref('target').once('value', s => {
-            const d = s.val() || {};
-            for(let n in d) {
-                const el = document.getElementById(`target-${n}`);
-                if(el) el.innerText = d[n];
-            }
+            const inv = d.inventory || {}, tar = d.target || {};
+            for(let n in inv) { if(document.getElementById(`qty-${n}`)) document.getElementById(`qty-${n}`).innerText = inv[n]; }
+            for(let n in tar) { if(document.getElementById(`target-${n}`)) document.getElementById(`target-${n}`).innerText = tar[n]; }
         });
     }
 
@@ -603,47 +286,100 @@
         return card;
     }
 
-  // 修改原本的 setMode
-function setMode(mode) {
-    currentMode = mode;
-    const body = document.body;
-    const header = document.getElementById('listHeader');
-    const switchBtn = document.getElementById('quickSwitchBtn');
-    const batchBtn = document.getElementById('batchBtn');
-
-    document.getElementById('modeTitle').innerText = (mode === '取用' ? '📤 出庫模式' : '📥 入庫模式');
-    document.getElementById('actionDate').valueAsDate = new Date();
-
-    // 修改顏色視覺
-    if (mode === '取用') {
-        body.className = 'mode-out-theme'; // 全域背景變深紅
-        if(header) header.className = 'header header-out';
-        if(batchBtn) batchBtn.style.background = '#E91E63';
-        if(switchBtn) switchBtn.innerText = '🔄 轉為入庫';
-    } else {
-        body.className = 'mode-in-theme'; // 全域背景變深綠
-        if(header) header.className = 'header header-in';
-        if(batchBtn) batchBtn.style.background = '#4CAF50';
-        if(switchBtn) switchBtn.innerText = '🔄 轉為出庫';
+    function setMode(mode) {
+        currentMode = mode;
+        const body = document.body;
+        const header = document.getElementById('listHeader');
+        const switchBtn = document.getElementById('quickSwitchBtn');
+        const batchBtn = document.getElementById('batchBtn');
+        document.getElementById('modeTitle').innerText = (mode === '取用' ? '📤 出庫模式' : '📥 入庫模式');
+        document.getElementById('actionDate').valueAsDate = new Date();
+        if (mode === '取用') {
+            body.className = 'mode-out-theme';
+            if(header) header.className = 'header header-out';
+            if(batchBtn) batchBtn.style.background = '#E91E63';
+            if(switchBtn) switchBtn.innerText = '🔄 轉為入庫';
+        } else {
+            body.className = 'mode-in-theme';
+            if(header) header.className = 'header header-in';
+            if(batchBtn) batchBtn.style.background = '#4CAF50';
+            if(switchBtn) switchBtn.innerText = '🔄 轉為出庫';
+        }
+        showPage('homePage');
     }
 
-    showPage('homePage');
-}
-
-// 新增：頁面內的快速切換
-function toggleQuickMode() {
-    const nextMode = (currentMode === '取用' ? '入庫' : '取用');
-    if (Object.keys(draft).length > 0) {
-        if (!confirm("切換模式將會清空目前已填寫的數量，確定切換嗎？")) return;
+    function toggleQuickMode() {
+        const nextMode = (currentMode === '取用' ? '入庫' : '取用');
+        if (Object.keys(draft).length > 0 && !confirm("切換模式將清空暫存，確定？")) return;
+        draft = {}; 
+        setMode(nextMode);
+        const currentCat = document.getElementById('categoryTitle').innerText.includes('Truss') ? 'truss' : 
+                           document.getElementById('categoryTitle').innerText.includes('帳篷') ? 'tent' : 'others';
+        openCategory(currentCat);
     }
-    draft = {}; // 清空草稿避免出入庫混亂
-    setMode(nextMode);
-    
-    // 重新渲染當前類別畫面，讓按鈕顏色更新
-    const currentCat = document.getElementById('categoryTitle').innerText.includes('Truss') ? 'truss' : 
-                       document.getElementById('categoryTitle').innerText.includes('帳篷') ? 'tent' : 'others';
-    openCategory(currentCat);
-}
+
+    // ✅ 移除 location.reload()，改為手動刷新[cite: 1]
+    function submitBatch() {
+        const user = savedUser;
+        const items = Object.keys(draft);
+        if (!user || items.length === 0) return alert('尚未完成！');
+
+        let confirmMsg = `📋 【批量確認】\n模式：${currentMode}\n人員：${user}\n----------------\n`;
+        items.forEach(n => confirmMsg += `🔹 ${n} : ${draft[n]}\n`);
+
+        if (confirm(confirmMsg)) {
+            const event = document.getElementById('eventTag').value || "無備註";
+            const actionDate = document.getElementById('actionDate').value;
+            items.forEach(name => {
+                let delta = (currentMode === '入庫') ? Math.abs(parseInt(draft[name])) : -Math.abs(parseInt(draft[name]));
+                db.ref('inventory/' + name).transaction(c => (c || 0) + delta);
+                db.ref('logs').push({ user, name, val: delta, event, date: actionDate, time: new Date().toLocaleString() });
+            });
+            draft = {}; 
+            alert('✅ 送出成功！');
+            refreshDigits(); // 不再重整頁面
+        }
+    }
+
+    function submitChange(name) {
+        const user = savedUser, val = parseInt(document.getElementById('input-' + name).value);
+        if (!user || isNaN(val)) return alert('請確認人員與數量');
+
+        if (confirm(`📋 【單項確認】\n品項：${name}\n數量：${val}\n確定送出？`)) {
+            let delta = (currentMode === '入庫') ? Math.abs(val) : -Math.abs(val);
+            db.ref('inventory/' + name).transaction(c => (c || 0) + delta);
+            db.ref('logs').push({ 
+                user, name, val: delta, event: document.getElementById('eventTag').value || "無備註", 
+                date: document.getElementById('actionDate').value, time: new Date().toLocaleString() 
+            });
+            alert('✅ 成功');
+            document.getElementById('input-' + name).value = '';
+            delete draft[name];
+            refreshDigits();
+        }
+    }
+
+    function showSummary() {
+        const container = document.getElementById('summaryContainer'); container.innerHTML = '載入中...';
+        db.ref().once('value', s => {
+            const full = s.val() || {}, inv = full.inventory || {}, tar = full.target || {};
+            container.innerHTML = '';
+            const groupNames = {truss: "🏗️ Truss 類", tent: "⛺ 帳篷類", others: "📦 其他物料"};
+            for (let mk in remoteCategories) {
+                container.innerHTML += `<div class="sub-group-title" style="margin-top:20px; color:#FFD700; background:rgba(0,0,0,0.3); padding:10px;">${groupNames[mk] || mk}</div>`;
+                for (let st in remoteCategories[mk]) {
+                    container.innerHTML += `<div style="padding:5px 10px; font-size:14px; color:#aaa;">● ${st}</div>`;
+                    Object.keys(remoteCategories[mk][st]).forEach(name => {
+                        const row = document.createElement('div');
+                        row.style.cssText = "background:white; color:black; margin:5px 10px; padding:10px; border-radius:8px; display:flex; justify-content:space-between; align-items:center;";
+                        row.innerHTML = `<span>${name}</span><div><b style="color:#E91E63;">${inv[name] || 0}</b><span style="color:#ccc; margin:0 4px;">/</span><b style="color:#2196F3;">${tar[name] || 0}</b></div>`;
+                        container.appendChild(row);
+                    });
+                }
+            }
+        });
+        showPage('summaryPage');
+    }
 
     function showPage(id) { 
         document.querySelectorAll('.page').forEach(p => p.classList.remove('active')); 
@@ -652,158 +388,7 @@ function toggleQuickMode() {
 
     function updateDraft(n, v) { if (v && v !== "0") draft[n] = v; else delete draft[n]; }
 
-   function submitBatch() {
-        const user = savedUser;
-        const items = Object.keys(draft);
-
-        if (!user) return alert('請先選擇人員！');
-        if (items.length === 0) return alert('尚未輸入任何數量！');
-
-        // 1. 建立核對文字
-        let confirmMessage = "📋 【批量庫存核對清單】\n";
-        confirmMessage += "----------------------------\n";
-        confirmMessage += "操作模式：" + (currentMode === '入庫' ? "📥 入庫 (歸還)" : "📤 出庫 (拿取)") + "\n";
-        confirmMessage += "執行人員：" + user + "\n\n";
-        
-        items.forEach(name => {
-            confirmMessage += "品項：" + name + "\n";
-            confirmMessage += "數量：" + draft[name] + "\n";
-            confirmMessage += "----------------------------\n";
-        });
-        
-        confirmMessage += "\n確定要送出以上內容嗎？";
-
-        // 2. 核對後送出
-        if (confirm(confirmMessage)) {
-            const event = document.getElementById('eventTag').value || "無備註";
-            const actionDate = document.getElementById('actionDate').value;
-
-            items.forEach(name => {
-                let delta = (currentMode === '入庫') ? Math.abs(parseInt(draft[name])) : -Math.abs(parseInt(draft[name]));
-                
-                // 更新 Firebase
-                db.ref('inventory/' + name).transaction(c => (c || 0) + delta);
-                db.ref('logs').push({
-                    user: user, name: name, val: delta, event: event, 
-                    date: actionDate, time: new Date().toLocaleString()
-                });
-            });
-
-            draft = {}; 
-            alert('✅ 批量修改成功！');
-            location.reload(); 
-        }
-    }
-    
-    confirmMessage += "------------------------\n";
-    confirmMessage += "確定要送出以上修改嗎？";
-
-    // --- 2. 顯示核對視窗 ---
-    if (confirm(confirmMessage)) {
-        const event = document.getElementById('eventTag').value || "無備註";
-        const actionDate = document.getElementById('actionDate').value;
-
-        // 執行 Firebase 更新
-        items.forEach(name => {
-            // 計算增加或減少
-            let delta = (currentMode === '入庫') ? 
-                        Math.abs(parseInt(draft[name])) : 
-                        -Math.abs(parseInt(draft[name]));
-
-            // 更新庫存
-            db.ref('inventory/' + name).transaction(c => (c || 0) + delta);
-
-            // 寫入日誌
-            db.ref('logs').push({
-                user: user,
-                name: name,
-                val: delta,
-                event: event,
-                date: actionDate,
-                time: new Date().toLocaleString()
-            });
-        });
-
-        // 成功後的動作
-        draft = {}; 
-        alert('✅ 修改成功！');
-        location.reload(); // 重新整理頁面
-    } else {
-        // 使用者按了取消
-        console.log("使用者已取消送出");
-    }
-}
-
-   function submitChange(name) {
-        const user = savedUser;
-        const inputEl = document.getElementById('input-' + name);
-        const val = parseInt(inputEl.value);
-
-        if (!user || isNaN(val)) return alert('請確認人員已選取並填入數量');
-
-        // 建立單個核對文字
-        let confirmMessage = "📋 【單項庫存確認】\n";
-        confirmMessage += "----------------------------\n";
-        confirmMessage += "人員：" + user + "\n";
-        confirmMessage += "動作：" + (currentMode === '入庫' ? "📥 入庫" : "📤 出庫") + "\n";
-        confirmMessage += "品項：" + name + "\n";
-        confirmMessage += "數量：" + val + "\n";
-        confirmMessage += "----------------------------\n";
-        confirmMessage += "確定送出嗎？";
-
-        if (confirm(confirmMessage)) {
-            let delta = (currentMode === '入庫') ? Math.abs(val) : -Math.abs(val);
-            const actionDate = document.getElementById('actionDate').value;
-            const event = document.getElementById('eventTag').value || "無備註";
-
-            db.ref('inventory/' + name).transaction(c => (c || 0) + delta);
-            db.ref('logs').push({
-                user: user, name: name, val: delta, event: event, 
-                date: actionDate, time: new Date().toLocaleString()
-            });
-
-            alert('✅ 送出成功');
-            inputEl.value = '';
-            delete draft[name];
-            // 更新畫面上剛剛改動的數字 (如果不重整頁面)
-            refreshDigits();
-        }
-    }
-
-    function showSummary() {
-        const container = document.getElementById('summaryContainer'); container.innerHTML = '載入中...';
-        db.ref('inventory').once('value', snap => {
-            const invData = snap.val() || {};
-            db.ref('target').once('value', targetSnap => {
-                const targetData = targetSnap.val() || {};
-                container.innerHTML = '';
-                const groupNames = {truss: "🏗️ Truss 類", tent: "⛺ 帳篷類", others: "📦 其他物料"};
-                for (let mainKey in remoteCategories) {
-                    container.innerHTML += `<div class="sub-group-title" style="margin-top:20px; color:#FFD700; background:rgba(0,0,0,0.3); padding:10px;">${groupNames[mainKey] || mainKey}</div>`;
-                    const subCats = remoteCategories[mainKey];
-                    for (let subTitle in subCats) {
-                        container.innerHTML += `<div style="padding:5px 10px; font-size:14px; color:#aaa;">● ${subTitle}</div>`;
-                        const items = Object.keys(subCats[subTitle]);
-                        items.forEach(name => {
-                            const row = document.createElement('div');
-                            row.style.cssText = "background:white; color:black; margin:5px 10px; padding:10px; border-radius:8px; display:flex; justify-content:space-between; align-items:center;";
-                            row.innerHTML = `<span>${name}</span>
-                                <div>
-                                    <b style="color:#E91E63;">${invData[name] || 0}</b> 
-                                    <span style="color:#ccc; margin:0 4px;">/</span> 
-                                    <b style="color:#2196F3;">${targetData[name] || 0}</b>
-                                </div>`;
-                            container.appendChild(row);
-                        });
-                    }
-                }
-            });
-        });
-        showPage('summaryPage');
-    }
-
     window.onload = initUser;
 </script>
 </body>
 </html>
-
