@@ -157,28 +157,16 @@
         openCategory(catKey);
     }
 
-    function openCategory(cat) {
+   function openCategory(cat) {
         const container = document.getElementById('itemContainer'); 
         container.innerHTML = '';
         
-        // 設定標題與切換按鈕
+        // 設定標題與切換按鈕顏色
         const titleText = (cat==='truss'?'🏗️ Truss類':cat==='tent'?'⛺ 帳篷類':'📦 其它物料');
         const header = document.getElementById('listPage').querySelector('.header');
         header.className = 'header ' + (currentMode === '取用' ? 'header-out' : 'header-in');
-        
         document.getElementById('categoryTitle').innerText = titleText;
         
-        // 確保切換按鈕存在
-        let switchBtn = document.getElementById('quickSwitchBtn');
-        if(!switchBtn) {
-            switchBtn = document.createElement('button');
-            switchBtn.id = 'quickSwitchBtn';
-            switchBtn.className = 'switch-mode-btn';
-            switchBtn.onclick = toggleQuickMode;
-            header.appendChild(switchBtn);
-        }
-        switchBtn.innerText = currentMode === '取用' ? '🔄 轉為入庫' : '🔄 轉為出庫';
-
         const subCats = remoteCategories[cat];
         if (subCats) {
             for (let subTitle in subCats) {
@@ -186,11 +174,37 @@
                 titleDiv.className = 'sub-group-title';
                 titleDiv.innerText = subTitle;
                 container.appendChild(titleDiv);
-                Object.keys(subCats[subTitle]).forEach(itemName => {
+
+                // --- 新增：自定義排序邏輯 ---
+                const items = Object.keys(subCats[subTitle]).sort((a, b) => {
+                    // 權重計算函式
+                    const getWeight = (name) => {
+                        // 檢查是否為「數字+Truss」（如 10Truss, 20Truss）
+                        const numTruss = name.match(/^(\d+)Truss/);
+                        if (numTruss) return parseInt(numTruss[1]); 
+
+                        // 檢查是否為「數字+米Truss」（如 1米Truss, 2米Truss）
+                        const meterTruss = name.match(/^(\d+)米Truss/);
+                        if (meterTruss) return parseInt(meterTruss[1]) + 1000; // 給予較大權重排後面
+
+                        return 9999; // 其他東西排最後
+                    };
+
+                    const weightA = getWeight(a);
+                    const weightB = getWeight(b);
+
+                    if (weightA !== weightB) return weightA - weightB;
+                    return a.localeCompare(b, 'zh-Hant'); // 若權重一樣則按中文排序
+                });
+                // -----------------------
+
+                items.forEach(itemName => {
                     container.appendChild(createItemCard(itemName));
                 });
             }
             refreshDigits();
+        } else {
+            container.innerHTML = '<div style="padding:20px; text-align:center;">資料載入中...</div>';
         }
         showPage('listPage');
     }
