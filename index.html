@@ -52,7 +52,7 @@
 </head>
 <body>
 
-    <!-- 首頁模式選擇 -->
+    <!-- 頁面結構保持不變 -->
     <div id="modePage" class="page active">
         <div class="header"><h1>八毅庫存系統</h1></div>
         <div class="form-container">
@@ -79,7 +79,6 @@
         </div>
     </div>
 
-    <!-- 表單填寫頁 -->
     <div id="homePage" class="page">
         <div class="header"><button class="back-btn" onclick="showPage('modePage')">← 回首頁</button><h1 id="modeTitle"></h1></div>
         <div class="form-container">
@@ -108,7 +107,6 @@
         </div>
     </div>
 
-    <!-- 清單顯示頁 -->
     <div id="listPage" class="page">
         <div id="listHeader" class="header">
             <button class="back-btn" onclick="showPage('homePage')" style="position:absolute; left:10px;">← 返回</button>
@@ -119,7 +117,6 @@
         <div class="batch-bar"><button id="batchBtn" class="batch-btn" onclick="submitBatch()">🚀 一鍵送出</button></div>
     </div>
 
-    <!-- 總量查看頁 -->
     <div id="summaryPage" class="page">
         <div class="header"><button class="back-btn" onclick="showPage('modePage')">← 返回</button><h1>即時庫存總覽</h1></div>
         <div id="summaryContainer" style="max-width:600px; margin:0 auto; padding:10px;"></div>
@@ -142,13 +139,14 @@
     let currentVoiceTarget = ''; 
     let remoteCategories = {}; 
 
-    // ✅ 單一監聽器優化：避免重複與混亂[cite: 1]
+    // ✅ 唯一的數據監聽大腦，避免名稱回溯衝突
     db.ref().on('value', snap => {
         const fullData = snap.val() || {};
         const inv = fullData.inventory || {};
         const tar = fullData.target || {};
         remoteCategories = fullData.categories || {};
         
+        // 自動更新畫面上所有存在的庫存數字
         for (let name in inv) {
             const el = document.getElementById(`qty-${name}`);
             if (el) el.innerText = inv[name];
@@ -216,14 +214,12 @@
         const user = savedUser;
         const inputId = source === 'entry' ? 'entryVoiceInput' : 'eventTag';
         const note = document.getElementById(inputId).value;
-        if(!user || !note) return alert("請確認人員已選擇，並說話錄音");
+        if(!user || !note) return alert("請確認人員與錄音");
         const dateVal = source === 'entry' ? new Date().toISOString().split('T')[0] : document.getElementById('actionDate').value;
         db.ref('logs').push({ user, type: "語音回覆", note, date: dateVal, time: new Date().toLocaleString() });
-        alert("回覆已送出"); 
-        document.getElementById(inputId).value = "";
+        alert("回覆已送出"); document.getElementById(inputId).value = "";
     }
 
-    // ✅ 保留排序邏輯的分類顯示[cite: 1]
     function openCategory(cat) {
         const container = document.getElementById('itemContainer'); 
         container.innerHTML = '';
@@ -237,6 +233,7 @@
                 titleDiv.innerText = subTitle;
                 container.appendChild(titleDiv);
 
+                // ✅ 排序邏輯：10->20->25->30->1米->2米[cite: 1]
                 const items = Object.keys(subCats[subTitle]).sort((a, b) => {
                     const getWeight = (name) => {
                         const numTruss = name.match(/^(\d+)Truss/);
@@ -249,9 +246,7 @@
                     return (wA !== wB) ? wA - wB : a.localeCompare(b, 'zh-Hant');
                 });
 
-                items.forEach(itemName => {
-                    container.appendChild(createItemCard(itemName));
-                });
+                items.forEach(itemName => { container.appendChild(createItemCard(itemName)); });
             }
             refreshDigits();
         }
@@ -318,13 +313,13 @@
         openCategory(currentCat);
     }
 
-    // ✅ 移除 location.reload()，改為手動刷新[cite: 1]
+    // ✅ 關鍵：移除 location.reload()，防止緩存回溯[cite: 1]
     function submitBatch() {
         const user = savedUser;
         const items = Object.keys(draft);
         if (!user || items.length === 0) return alert('尚未完成！');
 
-        let confirmMsg = `📋 【批量確認】\n模式：${currentMode}\n人員：${user}\n----------------\n`;
+        let confirmMsg = `📋 【核對】\n模式：${currentMode}\n人員：${user}\n----------------\n`;
         items.forEach(n => confirmMsg += `🔹 ${n} : ${draft[n]}\n`);
 
         if (confirm(confirmMsg)) {
@@ -336,8 +331,8 @@
                 db.ref('logs').push({ user, name, val: delta, event, date: actionDate, time: new Date().toLocaleString() });
             });
             draft = {}; 
-            alert('✅ 送出成功！');
-            refreshDigits(); // 不再重整頁面
+            alert('✅ 批量成功！');
+            refreshDigits(); // 靜態更新，不重整[cite: 1]
         }
     }
 
@@ -355,7 +350,7 @@
             alert('✅ 成功');
             document.getElementById('input-' + name).value = '';
             delete draft[name];
-            refreshDigits();
+            refreshDigits(); // 靜態更新，不重整[cite: 1]
         }
     }
 
